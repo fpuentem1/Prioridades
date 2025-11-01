@@ -7,7 +7,7 @@
  * 
  * Ejecutar con: npx tsx scripts/init-db.ts
  */
-
+import 'dotenv/config';
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 

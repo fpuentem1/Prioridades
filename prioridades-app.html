@@ -1,0 +1,1939 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Prioridades Semanales</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        }
+        .status-en-tiempo { background-color: #10b981; }
+        .status-en-riesgo { background-color: #f59e0b; }
+        .status-bloqueado { background-color: #ef4444; }
+        .status-completado { background-color: #3b82f6; }
+        .fade-in { animation: fadeIn 0.3s ease-in; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
+
+        // Utilidades
+        const getWeekDates = (date = new Date()) => {
+            const d = new Date(date);
+            const day = d.getDay();
+            const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+            const monday = new Date(d.setDate(diff));
+            monday.setHours(0, 0, 0, 0);
+            
+            const friday = new Date(monday);
+            friday.setDate(monday.getDate() + 4);
+            friday.setHours(23, 59, 59, 999);
+            
+            return { monday, friday };
+        };
+
+        const formatDate = (date) => {
+            return new Date(date).toLocaleDateString('es-MX', { 
+                year: 'numeric', 
+                month: 'short', 
+                day: 'numeric' 
+            });
+        };
+
+        const getWeekLabel = (monday) => {
+            const friday = new Date(monday);
+            friday.setDate(monday.getDate() + 4);
+            return `${formatDate(monday)} - ${formatDate(friday)}`;
+        };
+
+        // Datos iniciales
+        const initialInitiatives = [
+            { id: '1', name: 'Generación de ingresos', color: '#10b981', order: 1, isActive: true },
+            { id: '2', name: 'Nuevo negocio con clientes actuales', color: '#3b82f6', order: 2, isActive: true },
+            { id: '3', name: 'Eficiencia Operativa', color: '#f59e0b', order: 3, isActive: true },
+            { id: '4', name: 'Analítica Avanzada, Talento y Cultura', color: '#8b5cf6', order: 4, isActive: true },
+            { id: '5', name: 'Orca SNS', color: '#ec4899', order: 5, isActive: true }
+        ];
+
+        const initialUsers = [
+            { id: '1', name: 'Admin Usuario', email: 'admin@empresa.com', role: 'ADMIN', isActive: true },
+            { id: '2', name: 'Juan Pérez', email: 'juan@empresa.com', role: 'USER', isActive: true },
+            { id: '3', name: 'María García', email: 'maria@empresa.com', role: 'USER', isActive: true },
+            { id: '4', name: 'Carlos López', email: 'carlos@empresa.com', role: 'USER', isActive: true }
+        ];
+
+        // Componente Principal
+        function App() {
+            const [currentUser, setCurrentUser] = useState(null);
+            const [view, setView] = useState('login');
+            const [users, setUsers] = useState(() => {
+                const saved = localStorage.getItem('users');
+                return saved ? JSON.parse(saved) : initialUsers;
+            });
+            const [initiatives, setInitiatives] = useState(() => {
+                const saved = localStorage.getItem('initiatives');
+                return saved ? JSON.parse(saved) : initialInitiatives;
+            });
+            const [priorities, setPriorities] = useState(() => {
+                const saved = localStorage.getItem('priorities');
+                return saved ? JSON.parse(saved) : [];
+            });
+            const [currentWeek, setCurrentWeek] = useState(() => getWeekDates());
+
+            useEffect(() => {
+                localStorage.setItem('users', JSON.stringify(users));
+            }, [users]);
+
+            useEffect(() => {
+                localStorage.setItem('initiatives', JSON.stringify(initiatives));
+            }, [initiatives]);
+
+            useEffect(() => {
+                localStorage.setItem('priorities', JSON.stringify(priorities));
+            }, [priorities]);
+
+            const savePriority = (priority) => {
+                const existing = priorities.find(p => p.id === priority.id);
+                if (existing) {
+                    setPriorities(priorities.map(p => 
+                        p.id === priority.id ? { ...priority, wasEdited: true, lastEditedAt: new Date().toISOString() } : p
+                    ));
+                } else {
+                    setPriorities([...priorities, { 
+                        ...priority, 
+                        id: Date.now().toString(),
+                        createdAt: new Date().toISOString(),
+                        wasEdited: false
+                    }]);
+                }
+            };
+
+            const deletePriority = (id) => {
+                setPriorities(priorities.filter(p => p.id !== id));
+            };
+
+            if (!currentUser) {
+                return <LoginScreen users={users} onLogin={setCurrentUser} />;
+            }
+
+            return (
+                <div className="min-h-screen bg-gray-50">
+                    <Navbar 
+                        currentUser={currentUser} 
+                        view={view} 
+                        setView={setView} 
+                        onLogout={() => setCurrentUser(null)}
+                    />
+                    <div className="container mx-auto px-4 py-6">
+                        {view === 'dashboard' && (
+                            <Dashboard 
+                                priorities={priorities}
+                                users={users}
+                                initiatives={initiatives}
+                                currentWeek={currentWeek}
+                                setCurrentWeek={setCurrentWeek}
+                            />
+                        )}
+                        {view === 'my-priorities' && (
+                            <MyPriorities 
+                                currentUser={currentUser}
+                                priorities={priorities}
+                                initiatives={initiatives}
+                                currentWeek={currentWeek}
+                                onSave={savePriority}
+                                onDelete={deletePriority}
+                            />
+                        )}
+                        {view === 'analytics' && (
+                            <Analytics 
+                                priorities={priorities}
+                                users={users}
+                                initiatives={initiatives}
+                            />
+                        )}
+                        {view === 'admin-users' && currentUser.role === 'ADMIN' && (
+                            <AdminUsers users={users} setUsers={setUsers} />
+                        )}
+                        {view === 'admin-initiatives' && currentUser.role === 'ADMIN' && (
+                            <AdminInitiatives initiatives={initiatives} setInitiatives={setInitiatives} />
+                        )}
+                        {view === 'history' && (
+                            <History 
+                                priorities={priorities}
+                                users={users}
+                                initiatives={initiatives}
+                            />
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        // Login Screen
+        function LoginScreen({ users, onLogin }) {
+            const [selectedUser, setSelectedUser] = useState('');
+
+            return (
+                <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-500 to-purple-600">
+                    <div className="bg-white rounded-lg shadow-xl p-8 max-w-md w-full fade-in">
+                        <div className="text-center mb-8">
+                            <i className="fas fa-tasks text-5xl text-blue-600 mb-4"></i>
+                            <h1 className="text-3xl font-bold text-gray-800">Sistema de Prioridades</h1>
+                            <p className="text-gray-600 mt-2">Gestión semanal de objetivos estratégicos</p>
+                        </div>
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Selecciona tu usuario
+                                </label>
+                                <select 
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    value={selectedUser}
+                                    onChange={(e) => setSelectedUser(e.target.value)}
+                                >
+                                    <option value="">-- Seleccionar --</option>
+                                    {users.filter(u => u.isActive).map(user => (
+                                        <option key={user.id} value={user.id}>
+                                            {user.name} {user.role === 'ADMIN' ? '(Admin)' : ''}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                            <button 
+                                className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition disabled:opacity-50"
+                                onClick={() => {
+                                    const user = users.find(u => u.id === selectedUser);
+                                    if (user) onLogin(user);
+                                }}
+                                disabled={!selectedUser}
+                            >
+                                <i className="fas fa-sign-in-alt mr-2"></i>
+                                Iniciar Sesión
+                            </button>
+                        </div>
+                        <p className="text-center text-sm text-gray-500 mt-6">
+                            Prototipo Demo - Datos en LocalStorage
+                        </p>
+                    </div>
+                </div>
+            );
+        }
+
+        // Navbar
+        function Navbar({ currentUser, view, setView, onLogout }) {
+            return (
+                <nav className="bg-white shadow-md">
+                    <div className="container mx-auto px-4">
+                        <div className="flex items-center justify-between h-16">
+                            <div className="flex items-center space-x-8">
+                                <div className="flex items-center">
+                                    <i className="fas fa-tasks text-2xl text-blue-600 mr-2"></i>
+                                    <span className="font-bold text-xl text-gray-800">Prioridades</span>
+                                </div>
+                                <div className="hidden md:flex space-x-4">
+                                    <NavButton icon="fa-chart-line" label="Dashboard" active={view === 'dashboard'} onClick={() => setView('dashboard')} />
+                                    <NavButton icon="fa-clipboard-list" label="Mis Prioridades" active={view === 'my-priorities'} onClick={() => setView('my-priorities')} />
+                                    <NavButton icon="fa-chart-bar" label="Analítica" active={view === 'analytics'} onClick={() => setView('analytics')} />
+                                    <NavButton icon="fa-history" label="Histórico" active={view === 'history'} onClick={() => setView('history')} />
+                                    {currentUser.role === 'ADMIN' && (
+                                        <>
+                                            <NavButton icon="fa-users" label="Usuarios" active={view === 'admin-users'} onClick={() => setView('admin-users')} />
+                                            <NavButton icon="fa-lightbulb" label="Iniciativas" active={view === 'admin-initiatives'} onClick={() => setView('admin-initiatives')} />
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="flex items-center space-x-4">
+                                <div className="text-right">
+                                    <div className="text-sm font-semibold text-gray-800">{currentUser.name}</div>
+                                    <div className="text-xs text-gray-500">{currentUser.role === 'ADMIN' ? 'Administrador' : 'Usuario'}</div>
+                                </div>
+                                <button 
+                                    onClick={onLogout}
+                                    className="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition"
+                                >
+                                    <i className="fas fa-sign-out-alt"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </nav>
+            );
+        }
+
+        function NavButton({ icon, label, active, onClick }) {
+            return (
+                <button 
+                    onClick={onClick}
+                    className={`px-3 py-2 rounded-lg font-medium transition ${
+                        active ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'
+                    }`}
+                >
+                    <i className={`fas ${icon} mr-2`}></i>
+                    {label}
+                </button>
+            );
+        }
+
+        // Dashboard
+        function Dashboard({ priorities, users, initiatives, currentWeek, setCurrentWeek }) {
+            const activeUsers = users.filter(u => u.isActive && u.role === 'USER');
+            
+            const weekPriorities = priorities.filter(p => {
+                const pDate = new Date(p.weekStart);
+                return pDate >= currentWeek.monday && pDate <= currentWeek.friday;
+            });
+
+            const stats = useMemo(() => {
+                const total = weekPriorities.length;
+                const completed = weekPriorities.filter(p => p.status === 'COMPLETADO').length;
+                const avgCompletion = total > 0 
+                    ? weekPriorities.reduce((sum, p) => sum + p.completionPercentage, 0) / total 
+                    : 0;
+                
+                return { total, completed, avgCompletion: avgCompletion.toFixed(1) };
+            }, [weekPriorities]);
+
+            const navigateWeek = (direction) => {
+                const newMonday = new Date(currentWeek.monday);
+                newMonday.setDate(newMonday.getDate() + (direction * 7));
+                setCurrentWeek(getWeekDates(newMonday));
+            };
+
+            return (
+                <div className="space-y-6 fade-in">
+                    <div className="flex items-center justify-between">
+                        <h1 className="text-3xl font-bold text-gray-800">
+                            <i className="fas fa-chart-line mr-3 text-blue-600"></i>
+                            Dashboard de Prioridades
+                        </h1>
+                        <div className="flex items-center space-x-4">
+                            <button 
+                                onClick={() => navigateWeek(-1)}
+                                className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300 transition"
+                            >
+                                <i className="fas fa-chevron-left"></i>
+                            </button>
+                            <div className="text-center">
+                                <div className="text-sm text-gray-600">Semana del</div>
+                                <div className="font-semibold text-gray-800">{getWeekLabel(currentWeek.monday)}</div>
+                            </div>
+                            <button 
+                                onClick={() => navigateWeek(1)}
+                                className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300 transition"
+                            >
+                                <i className="fas fa-chevron-right"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <StatCard 
+                            icon="fa-list-check" 
+                            label="Total Prioridades" 
+                            value={stats.total} 
+                            color="blue"
+                        />
+                        <StatCard 
+                            icon="fa-check-circle" 
+                            label="Completadas" 
+                            value={stats.completed} 
+                            color="green"
+                        />
+                        <StatCard 
+                            icon="fa-percent" 
+                            label="% Promedio Avance" 
+                            value={`${stats.avgCompletion}%`} 
+                            color="purple"
+                        />
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        {activeUsers.map(user => (
+                            <UserPriorityCard 
+                                key={user.id}
+                                user={user}
+                                priorities={weekPriorities.filter(p => p.userId === user.id)}
+                                initiatives={initiatives}
+                            />
+                        ))}
+                    </div>
+                </div>
+            );
+        }
+
+        function StatCard({ icon, label, value, color }) {
+            const colors = {
+                blue: 'bg-blue-500',
+                green: 'bg-green-500',
+                purple: 'bg-purple-500'
+            };
+
+            return (
+                <div className="bg-white rounded-lg shadow-md p-6">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <div className="text-sm text-gray-600 mb-1">{label}</div>
+                            <div className="text-3xl font-bold text-gray-800">{value}</div>
+                        </div>
+                        <div className={`${colors[color]} text-white w-14 h-14 rounded-full flex items-center justify-center`}>
+                            <i className={`fas ${icon} text-2xl`}></i>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        function UserPriorityCard({ user, priorities, initiatives }) {
+            const avgCompletion = priorities.length > 0
+                ? priorities.reduce((sum, p) => sum + p.completionPercentage, 0) / priorities.length
+                : 0;
+
+            return (
+                <div className="bg-white rounded-lg shadow-md p-6">
+                    <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center">
+                            <div className="w-10 h-10 bg-blue-500 text-white rounded-full flex items-center justify-center font-bold mr-3">
+                                {user.name.split(' ').map(n => n[0]).join('')}
+                            </div>
+                            <div>
+                                <div className="font-semibold text-gray-800">{user.name}</div>
+                                <div className="text-sm text-gray-500">{priorities.length} prioridades</div>
+                            </div>
+                        </div>
+                        <div className="text-right">
+                            <div className="text-2xl font-bold text-gray-800">{avgCompletion.toFixed(0)}%</div>
+                            <div className="text-xs text-gray-500">Promedio</div>
+                        </div>
+                    </div>
+
+                    <div className="space-y-3">
+                        {priorities.length === 0 ? (
+                            <div className="text-center text-gray-400 py-8">
+                                <i className="fas fa-inbox text-4xl mb-2"></i>
+                                <div>Sin prioridades esta semana</div>
+                            </div>
+                        ) : (
+                            priorities.map(priority => {
+                                const initiative = initiatives.find(i => i.id === priority.initiativeId);
+                                return (
+                                    <div key={priority.id} className="border-l-4 pl-3 py-2" style={{ borderColor: initiative?.color }}>
+                                        <div className="flex items-start justify-between">
+                                            <div className="flex-1">
+                                                <div className="font-medium text-gray-800 text-sm">{priority.title}</div>
+                                                <div className="text-xs text-gray-500 mt-1">{initiative?.name}</div>
+                                            </div>
+                                            <StatusBadge status={priority.status} />
+                                        </div>
+                                        <div className="mt-2">
+                                            <div className="flex items-center justify-between text-xs text-gray-600 mb-1">
+                                                <span>Avance</span>
+                                                <span className="font-semibold">{priority.completionPercentage}%</span>
+                                            </div>
+                                            <div className="w-full bg-gray-200 rounded-full h-2">
+                                                <div 
+                                                    className="bg-blue-600 h-2 rounded-full transition-all"
+                                                    style={{ width: `${priority.completionPercentage}%` }}
+                                                ></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        function StatusBadge({ status }) {
+            const config = {
+                'EN_TIEMPO': { label: 'En Tiempo', icon: 'fa-check', color: 'bg-green-500' },
+                'EN_RIESGO': { label: 'En Riesgo', icon: 'fa-exclamation-triangle', color: 'bg-yellow-500' },
+                'BLOQUEADO': { label: 'Bloqueado', icon: 'fa-ban', color: 'bg-red-500' },
+                'COMPLETADO': { label: 'Completado', icon: 'fa-check-circle', color: 'bg-blue-500' }
+            };
+
+            const { label, icon, color } = config[status] || config['EN_TIEMPO'];
+
+            return (
+                <span className={`${color} text-white text-xs px-2 py-1 rounded-full flex items-center space-x-1`}>
+                    <i className={`fas ${icon}`}></i>
+                    <span>{label}</span>
+                </span>
+            );
+        }
+
+        // My Priorities
+        function MyPriorities({ currentUser, priorities, initiatives, currentWeek, onSave, onDelete }) {
+            const [showForm, setShowForm] = useState(false);
+            const [editingPriority, setEditingPriority] = useState(null);
+
+            const myWeekPriorities = priorities.filter(p => {
+                const pDate = new Date(p.weekStart);
+                return p.userId === currentUser.id && pDate >= currentWeek.monday && pDate <= currentWeek.friday;
+            });
+
+            const handleEdit = (priority) => {
+                setEditingPriority(priority);
+                setShowForm(true);
+            };
+
+            const handleNew = () => {
+                setEditingPriority(null);
+                setShowForm(true);
+            };
+
+            const handleClose = () => {
+                setShowForm(false);
+                setEditingPriority(null);
+            };
+
+            const hasMoreThanFive = myWeekPriorities.length > 5;
+
+            return (
+                <div className="space-y-6 fade-in">
+                    <div className="flex items-center justify-between">
+                        <h1 className="text-3xl font-bold text-gray-800">
+                            <i className="fas fa-clipboard-list mr-3 text-blue-600"></i>
+                            Mis Prioridades
+                        </h1>
+                        <button 
+                            onClick={handleNew}
+                            className="bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition"
+                        >
+                            <i className="fas fa-plus mr-2"></i>
+                            Nueva Prioridad
+                        </button>
+                    </div>
+
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <div className="flex items-center">
+                            <i className="fas fa-info-circle text-blue-600 mr-3"></i>
+                            <div>
+                                <div className="font-semibold text-blue-900">Semana actual: {getWeekLabel(currentWeek.monday)}</div>
+                                <div className="text-sm text-blue-700">
+                                    {myWeekPriorities.length} prioridades asignadas
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {hasMoreThanFive && (
+                        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-lg">
+                            <div className="flex items-start">
+                                <i className="fas fa-exclamation-triangle text-yellow-600 text-xl mr-3 mt-1"></i>
+                                <div>
+                                    <h3 className="font-bold text-yellow-900 mb-1">
+                                        ⚠️ Advertencia: Más de 5 prioridades
+                                    </h3>
+                                    <p className="text-sm text-yellow-700">
+                                        Tienes {myWeekPriorities.length} prioridades esta semana. Se recomienda mantener máximo 5 para asegurar el foco y cumplimiento. 
+                                        Considera consolidar o replantear algunas prioridades.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {showForm ? (
+                        <PriorityForm 
+                            currentUser={currentUser}
+                            priority={editingPriority}
+                            initiatives={initiatives}
+                            currentWeek={currentWeek}
+                            onSave={(p) => {
+                                onSave(p);
+                                handleClose();
+                            }}
+                            onCancel={handleClose}
+                        />
+                    ) : (
+                        <div className="grid grid-cols-1 gap-4">
+                            {myWeekPriorities.length === 0 ? (
+                                <div className="bg-white rounded-lg shadow-md p-12 text-center">
+                                    <i className="fas fa-clipboard-list text-6xl text-gray-300 mb-4"></i>
+                                    <h3 className="text-xl font-semibold text-gray-600 mb-2">No tienes prioridades esta semana</h3>
+                                    <p className="text-gray-500">Comienza agregando tu primera prioridad</p>
+                                </div>
+                            ) : (
+                                myWeekPriorities.map(priority => (
+                                    <PriorityCard 
+                                        key={priority.id}
+                                        priority={priority}
+                                        initiative={initiatives.find(i => i.id === priority.initiativeId)}
+                                        onEdit={() => handleEdit(priority)}
+                                        onDelete={() => onDelete(priority.id)}
+                                    />
+                                ))
+                            )}
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        function PriorityCard({ priority, initiative, onEdit, onDelete }) {
+            return (
+                <div className="bg-white rounded-lg shadow-md p-6 border-l-4" style={{ borderColor: initiative?.color }}>
+                    <div className="flex items-start justify-between mb-4">
+                        <div className="flex-1">
+                            <div className="flex items-center space-x-2 mb-2">
+                                <h3 className="text-lg font-semibold text-gray-800">{priority.title}</h3>
+                                {priority.wasEdited && (
+                                    <span className="bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded">
+                                        <i className="fas fa-edit mr-1"></i>Editado
+                                    </span>
+                                )}
+                            </div>
+                            {priority.description && (
+                                <p className="text-sm text-gray-600 mb-3">{priority.description}</p>
+                            )}
+                            <div className="flex items-center space-x-4 text-sm">
+                                <span className="text-gray-600">
+                                    <i className="fas fa-lightbulb mr-1" style={{ color: initiative?.color }}></i>
+                                    {initiative?.name}
+                                </span>
+                                <StatusBadge status={priority.status} />
+                            </div>
+                        </div>
+                        <div className="flex space-x-2 ml-4">
+                            <button 
+                                onClick={onEdit}
+                                className="text-blue-600 hover:bg-blue-50 w-10 h-10 rounded-lg transition"
+                            >
+                                <i className="fas fa-edit"></i>
+                            </button>
+                            <button 
+                                onClick={onDelete}
+                                className="text-red-600 hover:bg-red-50 w-10 h-10 rounded-lg transition"
+                            >
+                                <i className="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="space-y-3">
+                        <div>
+                            <div className="flex items-center justify-between text-sm text-gray-600 mb-2">
+                                <span className="font-medium">Porcentaje de Completado</span>
+                                <span className="text-lg font-bold text-gray-800">{priority.completionPercentage}%</span>
+                            </div>
+                            <div className="w-full bg-gray-200 rounded-full h-3">
+                                <div 
+                                    className="bg-blue-600 h-3 rounded-full transition-all"
+                                    style={{ width: `${priority.completionPercentage}%` }}
+                                ></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        function PriorityForm({ currentUser, priority, initiatives, currentWeek, onSave, onCancel }) {
+            const [formData, setFormData] = useState(priority || {
+                title: '',
+                description: '',
+                initiativeId: '',
+                completionPercentage: 0,
+                status: 'EN_TIEMPO',
+                userId: currentUser.id,
+                weekStart: currentWeek.monday.toISOString(),
+                weekEnd: currentWeek.friday.toISOString()
+            });
+
+            const [aiLoading, setAiLoading] = useState(false);
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                onSave(formData);
+            };
+
+            const improveWithAI = async (field) => {
+                setAiLoading(true);
+                // Simulación de mejora con IA
+                setTimeout(() => {
+                    if (field === 'title') {
+                        setFormData({
+                            ...formData,
+                            title: `${formData.title} - [Mejorado con IA: más específico y orientado a resultados]`
+                        });
+                    } else {
+                        setFormData({
+                            ...formData,
+                            description: `${formData.description}\n\n[Mejorado con IA: Descripción más clara, estructurada y accionable con pasos específicos]`
+                        });
+                    }
+                    setAiLoading(false);
+                }, 1000);
+            };
+
+            return (
+                <div className="bg-white rounded-lg shadow-md p-6">
+                    <h2 className="text-2xl font-bold text-gray-800 mb-6">
+                        {priority ? 'Editar Prioridad' : 'Nueva Prioridad'}
+                    </h2>
+                    <form onSubmit={handleSubmit} className="space-y-6">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                Título de la Prioridad *
+                            </label>
+                            <div className="flex space-x-2">
+                                <input 
+                                    type="text"
+                                    required
+                                    maxLength={150}
+                                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    value={formData.title}
+                                    onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                                    placeholder="Ej: Aumentar ventas del producto X en 15%"
+                                />
+                                <button 
+                                    type="button"
+                                    onClick={() => improveWithAI('title')}
+                                    disabled={!formData.title || aiLoading}
+                                    className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition disabled:opacity-50"
+                                >
+                                    <i className="fas fa-wand-magic-sparkles mr-2"></i>
+                                    IA
+                                </button>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                Descripción Detallada
+                            </label>
+                            <div className="space-y-2">
+                                <textarea 
+                                    rows={4}
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    value={formData.description}
+                                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                                    placeholder="Describe los pasos específicos y resultados esperados..."
+                                ></textarea>
+                                <button 
+                                    type="button"
+                                    onClick={() => improveWithAI('description')}
+                                    disabled={!formData.description || aiLoading}
+                                    className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition disabled:opacity-50"
+                                >
+                                    <i className="fas fa-wand-magic-sparkles mr-2"></i>
+                                    Mejorar Descripción con IA
+                                </button>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                Iniciativa Estratégica *
+                            </label>
+                            <select 
+                                required
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                value={formData.initiativeId}
+                                onChange={(e) => setFormData({ ...formData, initiativeId: e.target.value })}
+                            >
+                                <option value="">-- Seleccionar Iniciativa --</option>
+                                {initiatives.filter(i => i.isActive).map(initiative => (
+                                    <option key={initiative.id} value={initiative.id}>
+                                        {initiative.name}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Estado
+                                </label>
+                                <select 
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    value={formData.status}
+                                    onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                                >
+                                    <option value="EN_TIEMPO">En Tiempo</option>
+                                    <option value="EN_RIESGO">En Riesgo</option>
+                                    <option value="BLOQUEADO">Bloqueado</option>
+                                    <option value="COMPLETADO">Completado</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Porcentaje Completado: {formData.completionPercentage}%
+                                </label>
+                                <input 
+                                    type="range"
+                                    min="0"
+                                    max="100"
+                                    step="5"
+                                    className="w-full"
+                                    value={formData.completionPercentage}
+                                    onChange={(e) => setFormData({ ...formData, completionPercentage: parseInt(e.target.value) })}
+                                />
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end space-x-4 pt-4">
+                            <button 
+                                type="button"
+                                onClick={onCancel}
+                                className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition"
+                            >
+                                Cancelar
+                            </button>
+                            <button 
+                                type="submit"
+                                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                            >
+                                <i className="fas fa-save mr-2"></i>
+                                Guardar Prioridad
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            );
+        }
+
+        // Analytics
+        function Analytics({ priorities, users, initiatives }) {
+            const activeUsers = users.filter(u => u.isActive && u.role === 'USER');
+
+            const userStats = activeUsers.map(user => {
+                const userPriorities = priorities.filter(p => p.userId === user.id);
+                const completed = userPriorities.filter(p => p.status === 'COMPLETADO').length;
+                const avgCompletion = userPriorities.length > 0
+                    ? userPriorities.reduce((sum, p) => sum + p.completionPercentage, 0) / userPriorities.length
+                    : 0;
+
+                return {
+                    user,
+                    total: userPriorities.length,
+                    completed,
+                    completionRate: userPriorities.length > 0 ? (completed / userPriorities.length * 100).toFixed(1) : 0,
+                    avgCompletion: avgCompletion.toFixed(1)
+                };
+            });
+
+            const initiativeStats = initiatives.map(initiative => {
+                const initiativePriorities = priorities.filter(p => p.initiativeId === initiative.id);
+                return {
+                    initiative,
+                    count: initiativePriorities.length,
+                    percentage: priorities.length > 0 ? (initiativePriorities.length / priorities.length * 100).toFixed(1) : 0
+                };
+            }).sort((a, b) => b.count - a.count);
+
+            return (
+                <div className="space-y-6 fade-in">
+                    <h1 className="text-3xl font-bold text-gray-800">
+                        <i className="fas fa-chart-bar mr-3 text-blue-600"></i>
+                        Analítica y Métricas
+                    </h1>
+
+                    <div className="bg-white rounded-lg shadow-md p-6">
+                        <h2 className="text-xl font-bold text-gray-800 mb-4">Rendimiento por Usuario</h2>
+                        <div className="overflow-x-auto">
+                            <table className="w-full">
+                                <thead>
+                                    <tr className="border-b">
+                                        <th className="text-left py-3 px-4">Usuario</th>
+                                        <th className="text-center py-3 px-4">Total Prioridades</th>
+                                        <th className="text-center py-3 px-4">Completadas</th>
+                                        <th className="text-center py-3 px-4">Tasa Completado</th>
+                                        <th className="text-center py-3 px-4">% Promedio Avance</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {userStats.map(stat => (
+                                        <tr key={stat.user.id} className="border-b hover:bg-gray-50">
+                                            <td className="py-3 px-4">
+                                                <div className="flex items-center">
+                                                    <div className="w-8 h-8 bg-blue-500 text-white rounded-full flex items-center justify-center text-sm font-bold mr-2">
+                                                        {stat.user.name.split(' ').map(n => n[0]).join('')}
+                                                    </div>
+                                                    {stat.user.name}
+                                                </div>
+                                            </td>
+                                            <td className="text-center py-3 px-4 font-semibold">{stat.total}</td>
+                                            <td className="text-center py-3 px-4">
+                                                <span className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-semibold">
+                                                    {stat.completed}
+                                                </span>
+                                            </td>
+                                            <td className="text-center py-3 px-4">
+                                                <span className="font-bold text-blue-600">{stat.completionRate}%</span>
+                                            </td>
+                                            <td className="text-center py-3 px-4">
+                                                <div className="flex items-center justify-center">
+                                                    <div className="w-24 bg-gray-200 rounded-full h-3 mr-2">
+                                                        <div 
+                                                            className="bg-blue-600 h-3 rounded-full"
+                                                            style={{ width: `${stat.avgCompletion}%` }}
+                                                        ></div>
+                                                    </div>
+                                                    <span className="font-semibold">{stat.avgCompletion}%</span>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div className="bg-white rounded-lg shadow-md p-6">
+                        <h2 className="text-xl font-bold text-gray-800 mb-4">Distribución por Iniciativa Estratégica</h2>
+                        <div className="space-y-4">
+                            {initiativeStats.map(stat => (
+                                <div key={stat.initiative.id}>
+                                    <div className="flex items-center justify-between mb-2">
+                                        <div className="flex items-center">
+                                            <div 
+                                                className="w-4 h-4 rounded-full mr-3"
+                                                style={{ backgroundColor: stat.initiative.color }}
+                                            ></div>
+                                            <span className="font-medium text-gray-800">{stat.initiative.name}</span>
+                                        </div>
+                                        <div className="flex items-center space-x-3">
+                                            <span className="text-sm text-gray-600">{stat.count} prioridades</span>
+                                            <span className="font-bold text-gray-800">{stat.percentage}%</span>
+                                        </div>
+                                    </div>
+                                    <div className="w-full bg-gray-200 rounded-full h-3">
+                                        <div 
+                                            className="h-3 rounded-full"
+                                            style={{ 
+                                                width: `${stat.percentage}%`,
+                                                backgroundColor: stat.initiative.color 
+                                            }}
+                                        ></div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // History
+        function History({ priorities, users, initiatives }) {
+            const [selectedUser, setSelectedUser] = useState('all');
+            const [selectedInitiative, setSelectedInitiative] = useState('all');
+
+            const weekGroups = useMemo(() => {
+                let filtered = priorities;
+
+                if (selectedUser !== 'all') {
+                    filtered = filtered.filter(p => p.userId === selectedUser);
+                }
+
+                if (selectedInitiative !== 'all') {
+                    filtered = filtered.filter(p => p.initiativeId === selectedInitiative);
+                }
+
+                const groups = {};
+                filtered.forEach(priority => {
+                    const weekKey = new Date(priority.weekStart).toISOString().split('T')[0];
+                    if (!groups[weekKey]) {
+                        groups[weekKey] = [];
+                    }
+                    groups[weekKey].push(priority);
+                });
+
+                return Object.entries(groups)
+                    .map(([weekStart, priorities]) => ({
+                        weekStart: new Date(weekStart),
+                        priorities
+                    }))
+                    .sort((a, b) => b.weekStart - a.weekStart);
+            }, [priorities, selectedUser, selectedInitiative]);
+
+            // Detectar prioridades abandonadas
+            const abandonedPriorities = useMemo(() => {
+                const recent = weekGroups.slice(0, 3);
+                const abandoned = [];
+
+                recent.forEach((week, index) => {
+                    if (index === recent.length - 1) return;
+
+                    week.priorities.forEach(priority => {
+                        if (priority.status !== 'COMPLETADO' && priority.completionPercentage < 100) {
+                            const nextWeek = recent[index + 1];
+                            const continued = nextWeek?.priorities.some(p => 
+                                p.userId === priority.userId && 
+                                p.title.toLowerCase().includes(priority.title.toLowerCase().substring(0, 20))
+                            );
+
+                            if (!continued) {
+                                abandoned.push({
+                                    ...priority,
+                                    weekLabel: getWeekLabel(week.weekStart)
+                                });
+                            }
+                        }
+                    });
+                });
+
+                return abandoned;
+            }, [weekGroups]);
+
+            return (
+                <div className="space-y-6 fade-in">
+                    <h1 className="text-3xl font-bold text-gray-800">
+                        <i className="fas fa-history mr-3 text-blue-600"></i>
+                        Histórico de Prioridades
+                    </h1>
+
+                    {abandonedPriorities.length > 0 && (
+                        <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-lg">
+                            <div className="flex items-start">
+                                <i className="fas fa-exclamation-triangle text-red-600 text-xl mr-3 mt-1"></i>
+                                <div className="flex-1">
+                                    <h3 className="font-bold text-red-900 mb-2">
+                                        Prioridades Abandonadas Detectadas
+                                    </h3>
+                                    <p className="text-sm text-red-700 mb-3">
+                                        Las siguientes prioridades no fueron completadas y no continuaron en semanas posteriores:
+                                    </p>
+                                    <div className="space-y-2">
+                                        {abandonedPriorities.map(priority => {
+                                            const user = users.find(u => u.id === priority.userId);
+                                            const initiative = initiatives.find(i => i.id === priority.initiativeId);
+                                            return (
+                                                <div key={priority.id} className="bg-white p-3 rounded border border-red-200">
+                                                    <div className="flex items-start justify-between">
+                                                        <div>
+                                                            <div className="font-semibold text-gray-800">{priority.title}</div>
+                                                            <div className="text-sm text-gray-600 mt-1">
+                                                                <span className="font-medium">{user?.name}</span> - 
+                                                                <span style={{ color: initiative?.color }}> {initiative?.name}</span> - 
+                                                                <span> {priority.weekLabel}</span>
+                                                            </div>
+                                                        </div>
+                                                        <div className="text-right">
+                                                            <div className="text-sm font-bold text-red-600">{priority.completionPercentage}%</div>
+                                                            <StatusBadge status={priority.status} />
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="bg-white rounded-lg shadow-md p-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Filtrar por Usuario
+                                </label>
+                                <select 
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                    value={selectedUser}
+                                    onChange={(e) => setSelectedUser(e.target.value)}
+                                >
+                                    <option value="all">Todos los usuarios</option>
+                                    {users.filter(u => u.role === 'USER').map(user => (
+                                        <option key={user.id} value={user.id}>{user.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Filtrar por Iniciativa
+                                </label>
+                                <select 
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                    value={selectedInitiative}
+                                    onChange={(e) => setSelectedInitiative(e.target.value)}
+                                >
+                                    <option value="all">Todas las iniciativas</option>
+                                    {initiatives.map(initiative => (
+                                        <option key={initiative.id} value={initiative.id}>{initiative.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+
+                        <div className="space-y-6">
+                            {weekGroups.length === 0 ? (
+                                <div className="text-center py-12">
+                                    <i className="fas fa-calendar-times text-6xl text-gray-300 mb-4"></i>
+                                    <p className="text-gray-500">No hay datos históricos con los filtros seleccionados</p>
+                                </div>
+                            ) : (
+                                weekGroups.map(week => {
+                                    const weekStats = {
+                                        total: week.priorities.length,
+                                        completed: week.priorities.filter(p => p.status === 'COMPLETADO').length,
+                                        avgCompletion: week.priorities.reduce((sum, p) => sum + p.completionPercentage, 0) / week.priorities.length
+                                    };
+
+                                    return (
+                                        <div key={week.weekStart.toISOString()} className="border-l-4 border-blue-500 pl-6">
+                                            <div className="flex items-center justify-between mb-4">
+                                                <div>
+                                                    <h3 className="text-lg font-bold text-gray-800">
+                                                        {getWeekLabel(week.weekStart)}
+                                                    </h3>
+                                                    <div className="text-sm text-gray-600">
+                                                        {weekStats.total} prioridades - {weekStats.completed} completadas - 
+                                                        Promedio: {weekStats.avgCompletion.toFixed(1)}%
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                {week.priorities.map(priority => {
+                                                    const user = users.find(u => u.id === priority.userId);
+                                                    const initiative = initiatives.find(i => i.id === priority.initiativeId);
+                                                    return (
+                                                        <div key={priority.id} className="bg-gray-50 rounded-lg p-4 border" style={{ borderLeftColor: initiative?.color, borderLeftWidth: '3px' }}>
+                                                            <div className="flex items-start justify-between mb-2">
+                                                                <div className="flex-1">
+                                                                    <div className="font-semibold text-gray-800 text-sm">{priority.title}</div>
+                                                                    <div className="text-xs text-gray-600 mt-1">
+                                                                        {user?.name} • {initiative?.name}
+                                                                    </div>
+                                                                </div>
+                                                                <StatusBadge status={priority.status} />
+                                                            </div>
+                                                            <div className="flex items-center justify-between text-xs">
+                                                                <div className="flex-1 bg-gray-200 rounded-full h-2 mr-2">
+                                                                    <div 
+                                                                        className="bg-blue-600 h-2 rounded-full"
+                                                                        style={{ width: `${priority.completionPercentage}%` }}
+                                                                    ></div>
+                                                                </div>
+                                                                <span className="font-bold text-gray-700">{priority.completionPercentage}%</span>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    );
+                                })
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // Admin Users
+        function AdminUsers({ users, setUsers }) {
+            const [showForm, setShowForm] = useState(false);
+            const [editingUser, setEditingUser] = useState(null);
+            const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
+
+            const handleSave = (userData) => {
+                if (editingUser) {
+                    setUsers(users.map(u => u.id === userData.id ? { ...userData, updatedAt: new Date().toISOString() } : u));
+                } else {
+                    setUsers([...users, { 
+                        ...userData, 
+                        id: Date.now().toString(),
+                        createdAt: new Date().toISOString()
+                    }]);
+                }
+                setShowForm(false);
+                setEditingUser(null);
+            };
+
+            const toggleActive = (userId) => {
+                setUsers(users.map(u => 
+                    u.id === userId ? { ...u, isActive: !u.isActive, updatedAt: new Date().toISOString() } : u
+                ));
+            };
+
+            const handleDelete = (userId) => {
+                setUsers(users.filter(u => u.id !== userId));
+                setShowDeleteConfirm(null);
+            };
+
+            const activeCount = users.filter(u => u.isActive).length;
+            const adminCount = users.filter(u => u.role === 'ADMIN').length;
+
+            return (
+                <div className="space-y-6 fade-in">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h1 className="text-3xl font-bold text-gray-800">
+                                <i className="fas fa-users mr-3 text-blue-600"></i>
+                                Gestión de Usuarios
+                            </h1>
+                            <p className="text-gray-600 mt-1">
+                                {activeCount} usuarios activos • {adminCount} administradores • {users.length} total
+                            </p>
+                        </div>
+                        <button 
+                            onClick={() => {
+                                setEditingUser(null);
+                                setShowForm(true);
+                            }}
+                            className="bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition shadow-md"
+                        >
+                            <i className="fas fa-user-plus mr-2"></i>
+                            Nuevo Usuario
+                        </button>
+                    </div>
+
+                    {showForm ? (
+                        <UserForm 
+                            user={editingUser}
+                            onSave={handleSave}
+                            onCancel={() => {
+                                setShowForm(false);
+                                setEditingUser(null);
+                            }}
+                        />
+                    ) : (
+                        <div className="bg-white rounded-lg shadow-md overflow-hidden">
+                            <div className="overflow-x-auto">
+                                <table className="w-full">
+                                    <thead className="bg-gray-50">
+                                        <tr>
+                                            <th className="text-left py-4 px-6 font-semibold text-gray-700">Usuario</th>
+                                            <th className="text-left py-4 px-6 font-semibold text-gray-700">Email</th>
+                                            <th className="text-center py-4 px-6 font-semibold text-gray-700">Rol</th>
+                                            <th className="text-center py-4 px-6 font-semibold text-gray-700">Estado</th>
+                                            <th className="text-center py-4 px-6 font-semibold text-gray-700">Acciones</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {users.length === 0 ? (
+                                            <tr>
+                                                <td colSpan="5" className="text-center py-12 text-gray-500">
+                                                    <i className="fas fa-users text-4xl mb-2"></i>
+                                                    <p>No hay usuarios registrados</p>
+                                                </td>
+                                            </tr>
+                                        ) : (
+                                            users.map(user => (
+                                                <tr key={user.id} className="border-t hover:bg-gray-50 transition">
+                                                    <td className="py-4 px-6">
+                                                        <div className="flex items-center">
+                                                            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-full flex items-center justify-center font-bold mr-3 shadow-md">
+                                                                {user.name.split(' ').map(n => n[0]).join('').substring(0, 2)}
+                                                            </div>
+                                                            <span className="font-medium text-gray-800">{user.name}</span>
+                                                        </div>
+                                                    </td>
+                                                    <td className="py-4 px-6">
+                                                        <div className="flex items-center text-gray-600">
+                                                            <i className="fas fa-envelope text-gray-400 mr-2 text-sm"></i>
+                                                            {user.email}
+                                                        </div>
+                                                    </td>
+                                                    <td className="py-4 px-6 text-center">
+                                                        <span className={`px-3 py-1 rounded-full text-xs font-semibold inline-flex items-center ${
+                                                            user.role === 'ADMIN' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'
+                                                        }`}>
+                                                            <i className={`fas ${user.role === 'ADMIN' ? 'fa-shield-halved' : 'fa-user'} mr-1.5`}></i>
+                                                            {user.role === 'ADMIN' ? 'Administrador' : 'Usuario'}
+                                                        </span>
+                                                    </td>
+                                                    <td className="py-4 px-6 text-center">
+                                                        <button 
+                                                            onClick={() => toggleActive(user.id)}
+                                                            className={`px-3 py-1 rounded-full text-xs font-semibold transition-all inline-flex items-center ${
+                                                                user.isActive 
+                                                                    ? 'bg-green-100 text-green-800 hover:bg-green-200' 
+                                                                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                                            }`}
+                                                        >
+                                                            <i className={`fas ${user.isActive ? 'fa-check-circle' : 'fa-times-circle'} mr-1.5`}></i>
+                                                            {user.isActive ? 'Activo' : 'Inactivo'}
+                                                        </button>
+                                                    </td>
+                                                    <td className="py-4 px-6">
+                                                        <div className="flex items-center justify-center space-x-2">
+                                                            <button 
+                                                                onClick={() => {
+                                                                    setEditingUser(user);
+                                                                    setShowForm(true);
+                                                                }}
+                                                                className="text-blue-600 hover:bg-blue-50 w-9 h-9 rounded-lg transition flex items-center justify-center"
+                                                                title="Editar usuario"
+                                                            >
+                                                                <i className="fas fa-edit"></i>
+                                                            </button>
+                                                            <button 
+                                                                onClick={() => setShowDeleteConfirm(user.id)}
+                                                                className="text-red-600 hover:bg-red-50 w-9 h-9 rounded-lg transition flex items-center justify-center"
+                                                                title="Eliminar usuario"
+                                                            >
+                                                                <i className="fas fa-trash-alt"></i>
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ))
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Modal de confirmación de eliminación */}
+                    {showDeleteConfirm && (
+                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 fade-in">
+                            <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
+                                <div className="text-center">
+                                    <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                        <i className="fas fa-exclamation-triangle text-red-600 text-2xl"></i>
+                                    </div>
+                                    <h3 className="text-xl font-bold text-gray-800 mb-2">¿Eliminar Usuario?</h3>
+                                    <p className="text-gray-600 mb-6">
+                                        Esta acción no se puede deshacer. Se eliminarán todas las prioridades asociadas a este usuario.
+                                    </p>
+                                    <div className="flex space-x-3 justify-center">
+                                        <button 
+                                            onClick={() => setShowDeleteConfirm(null)}
+                                            className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition"
+                                        >
+                                            Cancelar
+                                        </button>
+                                        <button 
+                                            onClick={() => handleDelete(showDeleteConfirm)}
+                                            className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition"
+                                        >
+                                            <i className="fas fa-trash-alt mr-2"></i>
+                                            Eliminar
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        function UserForm({ user, onSave, onCancel }) {
+            const [formData, setFormData] = useState(user || {
+                name: '',
+                email: '',
+                role: 'USER',
+                isActive: true
+            });
+
+            const [errors, setErrors] = useState({});
+
+            const validateForm = () => {
+                const newErrors = {};
+                
+                if (!formData.name.trim()) {
+                    newErrors.name = 'El nombre es obligatorio';
+                }
+                
+                if (!formData.email.trim()) {
+                    newErrors.email = 'El email es obligatorio';
+                } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+                    newErrors.email = 'Email inválido';
+                }
+                
+                setErrors(newErrors);
+                return Object.keys(newErrors).length === 0;
+            };
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                if (validateForm()) {
+                    onSave(formData);
+                }
+            };
+
+            return (
+                <div className="bg-white rounded-lg shadow-md p-6 fade-in">
+                    <div className="flex items-center justify-between mb-6">
+                        <h2 className="text-2xl font-bold text-gray-800">
+                            <i className={`fas ${user ? 'fa-user-edit' : 'fa-user-plus'} mr-2 text-blue-600`}></i>
+                            {user ? 'Editar Usuario' : 'Nuevo Usuario'}
+                        </h2>
+                        <button 
+                            onClick={onCancel}
+                            className="text-gray-400 hover:text-gray-600 transition"
+                        >
+                            <i className="fas fa-times text-xl"></i>
+                        </button>
+                    </div>
+
+                    <form onSubmit={handleSubmit} className="space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    <i className="fas fa-user mr-1 text-gray-400"></i>
+                                    Nombre Completo *
+                                </label>
+                                <input 
+                                    type="text"
+                                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 transition ${
+                                        errors.name ? 'border-red-500' : 'border-gray-300'
+                                    }`}
+                                    value={formData.name}
+                                    onChange={(e) => {
+                                        setFormData({ ...formData, name: e.target.value });
+                                        setErrors({ ...errors, name: null });
+                                    }}
+                                    placeholder="Ej: Juan Pérez"
+                                />
+                                {errors.name && (
+                                    <p className="text-red-500 text-xs mt-1">
+                                        <i className="fas fa-exclamation-circle mr-1"></i>
+                                        {errors.name}
+                                    </p>
+                                )}
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    <i className="fas fa-envelope mr-1 text-gray-400"></i>
+                                    Email *
+                                </label>
+                                <input 
+                                    type="email"
+                                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 transition ${
+                                        errors.email ? 'border-red-500' : 'border-gray-300'
+                                    }`}
+                                    value={formData.email}
+                                    onChange={(e) => {
+                                        setFormData({ ...formData, email: e.target.value });
+                                        setErrors({ ...errors, email: null });
+                                    }}
+                                    placeholder="correo@empresa.com"
+                                />
+                                {errors.email && (
+                                    <p className="text-red-500 text-xs mt-1">
+                                        <i className="fas fa-exclamation-circle mr-1"></i>
+                                        {errors.email}
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    <i className="fas fa-shield-halved mr-1 text-gray-400"></i>
+                                    Rol
+                                </label>
+                                <select 
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition"
+                                    value={formData.role}
+                                    onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                                >
+                                    <option value="USER">Usuario</option>
+                                    <option value="ADMIN">Administrador</option>
+                                </select>
+                                <p className="text-xs text-gray-500 mt-1">
+                                    {formData.role === 'ADMIN' 
+                                        ? 'Puede gestionar usuarios, iniciativas y ver todas las prioridades' 
+                                        : 'Solo puede gestionar sus propias prioridades'}
+                                </p>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    <i className="fas fa-toggle-on mr-1 text-gray-400"></i>
+                                    Estado
+                                </label>
+                                <div className="flex items-center h-10">
+                                    <label className="relative inline-flex items-center cursor-pointer">
+                                        <input 
+                                            type="checkbox"
+                                            className="sr-only peer"
+                                            checked={formData.isActive}
+                                            onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
+                                        />
+                                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                        <span className="ml-3 text-sm font-medium text-gray-700">
+                                            {formData.isActive ? 'Usuario activo' : 'Usuario inactivo'}
+                                        </span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                            <div className="flex items-start">
+                                <i className="fas fa-info-circle text-blue-600 mt-0.5 mr-2"></i>
+                                <div className="text-sm text-blue-800">
+                                    <strong>Nota:</strong> Los usuarios inactivos no podrán iniciar sesión ni serán visibles en los reportes.
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end space-x-4 pt-4 border-t">
+                            <button 
+                                type="button"
+                                onClick={onCancel}
+                                className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition"
+                            >
+                                <i className="fas fa-times mr-2"></i>
+                                Cancelar
+                            </button>
+                            <button 
+                                type="submit"
+                                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition shadow-md"
+                            >
+                                <i className="fas fa-save mr-2"></i>
+                                {user ? 'Actualizar Usuario' : 'Crear Usuario'}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            );
+        }
+
+        // Admin Initiatives
+        function AdminInitiatives({ initiatives, setInitiatives }) {
+            const [showForm, setShowForm] = useState(false);
+            const [editingInitiative, setEditingInitiative] = useState(null);
+            const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
+
+            const handleSave = (initiativeData) => {
+                if (editingInitiative) {
+                    setInitiatives(initiatives.map(i => 
+                        i.id === initiativeData.id ? { ...initiativeData, updatedAt: new Date().toISOString() } : i
+                    ));
+                } else {
+                    setInitiatives([...initiatives, { 
+                        ...initiativeData, 
+                        id: Date.now().toString(),
+                        order: initiatives.length + 1,
+                        createdAt: new Date().toISOString()
+                    }]);
+                }
+                setShowForm(false);
+                setEditingInitiative(null);
+            };
+
+            const toggleActive = (initiativeId) => {
+                setInitiatives(initiatives.map(i => 
+                    i.id === initiativeId ? { ...i, isActive: !i.isActive, updatedAt: new Date().toISOString() } : i
+                ));
+            };
+
+            const handleDelete = (initiativeId) => {
+                setInitiatives(initiatives.filter(i => i.id !== initiativeId));
+                setShowDeleteConfirm(null);
+            };
+
+            const moveInitiative = (index, direction) => {
+                const newInitiatives = [...initiatives];
+                const targetIndex = direction === 'up' ? index - 1 : index + 1;
+                
+                if (targetIndex >= 0 && targetIndex < newInitiatives.length) {
+                    [newInitiatives[index], newInitiatives[targetIndex]] = 
+                    [newInitiatives[targetIndex], newInitiatives[index]];
+                    
+                    // Actualizar el orden
+                    newInitiatives.forEach((init, idx) => {
+                        init.order = idx + 1;
+                    });
+                    
+                    setInitiatives(newInitiatives);
+                }
+            };
+
+            const activeCount = initiatives.filter(i => i.isActive).length;
+            const sortedInitiatives = [...initiatives].sort((a, b) => a.order - b.order);
+
+            return (
+                <div className="space-y-6 fade-in">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h1 className="text-3xl font-bold text-gray-800">
+                                <i className="fas fa-lightbulb mr-3 text-blue-600"></i>
+                                Gestión de Iniciativas Estratégicas
+                            </h1>
+                            <p className="text-gray-600 mt-1">
+                                {activeCount} iniciativas activas • {initiatives.length} total
+                            </p>
+                        </div>
+                        <button 
+                            onClick={() => {
+                                setEditingInitiative(null);
+                                setShowForm(true);
+                            }}
+                            className="bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition shadow-md"
+                        >
+                            <i className="fas fa-plus mr-2"></i>
+                            Nueva Iniciativa
+                        </button>
+                    </div>
+
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <div className="flex items-start">
+                            <i className="fas fa-info-circle text-blue-600 mt-0.5 mr-3"></i>
+                            <div className="text-sm text-blue-800">
+                                <strong>¿Qué son las iniciativas estratégicas?</strong>
+                                <p className="mt-1">
+                                    Son los ejes de acción principales de la empresa. Todas las prioridades deben estar 
+                                    alineadas a al menos una iniciativa para asegurar que el trabajo está enfocado en lo estratégico.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    {showForm ? (
+                        <InitiativeForm 
+                            initiative={editingInitiative}
+                            onSave={handleSave}
+                            onCancel={() => {
+                                setShowForm(false);
+                                setEditingInitiative(null);
+                            }}
+                        />
+                    ) : (
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            {sortedInitiatives.length === 0 ? (
+                                <div className="col-span-2 bg-white rounded-lg shadow-md p-12 text-center">
+                                    <i className="fas fa-lightbulb text-6xl text-gray-300 mb-4"></i>
+                                    <h3 className="text-xl font-semibold text-gray-600 mb-2">No hay iniciativas estratégicas</h3>
+                                    <p className="text-gray-500">Comienza creando la primera iniciativa</p>
+                                </div>
+                            ) : (
+                                sortedInitiatives.map((initiative, index) => (
+                                    <div 
+                                        key={initiative.id} 
+                                        className="bg-white rounded-lg shadow-md p-6 border-l-4 hover:shadow-lg transition" 
+                                        style={{ borderColor: initiative.color }}
+                                    >
+                                        <div className="flex items-start justify-between mb-4">
+                                            <div className="flex items-start flex-1">
+                                                <div className="flex flex-col space-y-1 mr-3">
+                                                    <button 
+                                                        onClick={() => moveInitiative(index, 'up')}
+                                                        disabled={index === 0}
+                                                        className="text-gray-400 hover:text-blue-600 disabled:opacity-30 disabled:cursor-not-allowed"
+                                                        title="Mover arriba"
+                                                    >
+                                                        <i className="fas fa-chevron-up"></i>
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => moveInitiative(index, 'down')}
+                                                        disabled={index === sortedInitiatives.length - 1}
+                                                        className="text-gray-400 hover:text-blue-600 disabled:opacity-30 disabled:cursor-not-allowed"
+                                                        title="Mover abajo"
+                                                    >
+                                                        <i className="fas fa-chevron-down"></i>
+                                                    </button>
+                                                </div>
+                                                
+                                                <div className="flex-1">
+                                                    <div className="flex items-center space-x-3 mb-2">
+                                                        <div 
+                                                            className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-md"
+                                                            style={{ backgroundColor: initiative.color }}
+                                                        >
+                                                            {initiative.order}
+                                                        </div>
+                                                        <h3 className="text-lg font-bold text-gray-800">{initiative.name}</h3>
+                                                    </div>
+                                                    {initiative.description && (
+                                                        <p className="text-sm text-gray-600 mt-2 ml-11">{initiative.description}</p>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            
+                                            <button 
+                                                onClick={() => toggleActive(initiative.id)}
+                                                className={`px-3 py-1 rounded-full text-xs font-semibold transition-all inline-flex items-center ml-3 ${
+                                                    initiative.isActive 
+                                                        ? 'bg-green-100 text-green-800 hover:bg-green-200' 
+                                                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                                }`}
+                                            >
+                                                <i className={`fas ${initiative.isActive ? 'fa-check-circle' : 'fa-times-circle'} mr-1.5`}></i>
+                                                {initiative.isActive ? 'Activa' : 'Inactiva'}
+                                            </button>
+                                        </div>
+                                        
+                                        <div className="flex justify-end space-x-2 pt-3 border-t">
+                                            <button 
+                                                onClick={() => {
+                                                    setEditingInitiative(initiative);
+                                                    setShowForm(true);
+                                                }}
+                                                className="text-blue-600 hover:bg-blue-50 px-4 py-2 rounded-lg transition flex items-center"
+                                            >
+                                                <i className="fas fa-edit mr-2"></i>
+                                                Editar
+                                            </button>
+                                            <button 
+                                                onClick={() => setShowDeleteConfirm(initiative.id)}
+                                                className="text-red-600 hover:bg-red-50 px-4 py-2 rounded-lg transition flex items-center"
+                                            >
+                                                <i className="fas fa-trash-alt mr-2"></i>
+                                                Eliminar
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    )}
+
+                    {/* Modal de confirmación de eliminación */}
+                    {showDeleteConfirm && (
+                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 fade-in">
+                            <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
+                                <div className="text-center">
+                                    <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                        <i className="fas fa-exclamation-triangle text-red-600 text-2xl"></i>
+                                    </div>
+                                    <h3 className="text-xl font-bold text-gray-800 mb-2">¿Eliminar Iniciativa?</h3>
+                                    <p className="text-gray-600 mb-6">
+                                        Esta acción no se puede deshacer. Las prioridades asociadas a esta iniciativa quedarán sin asignar.
+                                    </p>
+                                    <div className="flex space-x-3 justify-center">
+                                        <button 
+                                            onClick={() => setShowDeleteConfirm(null)}
+                                            className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition"
+                                        >
+                                            Cancelar
+                                        </button>
+                                        <button 
+                                            onClick={() => handleDelete(showDeleteConfirm)}
+                                            className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition"
+                                        >
+                                            <i className="fas fa-trash-alt mr-2"></i>
+                                            Eliminar
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        function InitiativeForm({ initiative, onSave, onCancel }) {
+            const [formData, setFormData] = useState(initiative || {
+                name: '',
+                description: '',
+                color: '#3B82F6',
+                isActive: true
+            });
+
+            const [errors, setErrors] = useState({});
+
+            const validateForm = () => {
+                const newErrors = {};
+                
+                if (!formData.name.trim()) {
+                    newErrors.name = 'El nombre de la iniciativa es obligatorio';
+                }
+                
+                setErrors(newErrors);
+                return Object.keys(newErrors).length === 0;
+            };
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                if (validateForm()) {
+                    onSave(formData);
+                }
+            };
+
+            const colors = [
+                { value: '#10b981', name: 'Verde' },
+                { value: '#3b82f6', name: 'Azul' },
+                { value: '#f59e0b', name: 'Naranja' },
+                { value: '#8b5cf6', name: 'Morado' },
+                { value: '#ec4899', name: 'Rosa' },
+                { value: '#ef4444', name: 'Rojo' },
+                { value: '#06b6d4', name: 'Cyan' },
+                { value: '#84cc16', name: 'Lima' },
+                { value: '#f97316', name: 'Naranja Oscuro' },
+                { value: '#14b8a6', name: 'Teal' },
+                { value: '#a855f7', name: 'Púrpura' },
+                { value: '#0ea5e9', name: 'Azul Cielo' }
+            ];
+
+            return (
+                <div className="bg-white rounded-lg shadow-md p-6 fade-in">
+                    <div className="flex items-center justify-between mb-6">
+                        <h2 className="text-2xl font-bold text-gray-800">
+                            <i className={`fas ${initiative ? 'fa-edit' : 'fa-plus-circle'} mr-2 text-blue-600`}></i>
+                            {initiative ? 'Editar Iniciativa' : 'Nueva Iniciativa Estratégica'}
+                        </h2>
+                        <button 
+                            onClick={onCancel}
+                            className="text-gray-400 hover:text-gray-600 transition"
+                        >
+                            <i className="fas fa-times text-xl"></i>
+                        </button>
+                    </div>
+
+                    <form onSubmit={handleSubmit} className="space-y-6">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                <i className="fas fa-lightbulb mr-1 text-gray-400"></i>
+                                Nombre de la Iniciativa *
+                            </label>
+                            <input 
+                                type="text"
+                                className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 transition ${
+                                    errors.name ? 'border-red-500' : 'border-gray-300'
+                                }`}
+                                value={formData.name}
+                                onChange={(e) => {
+                                    setFormData({ ...formData, name: e.target.value });
+                                    setErrors({ ...errors, name: null });
+                                }}
+                                placeholder="Ej: Generación de ingresos"
+                                maxLength={100}
+                            />
+                            {errors.name && (
+                                <p className="text-red-500 text-xs mt-1">
+                                    <i className="fas fa-exclamation-circle mr-1"></i>
+                                    {errors.name}
+                                </p>
+                            )}
+                            <p className="text-xs text-gray-500 mt-1">
+                                {formData.name.length}/100 caracteres
+                            </p>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                <i className="fas fa-align-left mr-1 text-gray-400"></i>
+                                Descripción
+                            </label>
+                            <textarea 
+                                rows={3}
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition"
+                                value={formData.description}
+                                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                                placeholder="Describe el objetivo y alcance de esta iniciativa estratégica..."
+                                maxLength={500}
+                            ></textarea>
+                            <p className="text-xs text-gray-500 mt-1">
+                                {formData.description.length}/500 caracteres
+                            </p>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-3">
+                                <i className="fas fa-palette mr-1 text-gray-400"></i>
+                                Color Identificador
+                            </label>
+                            <div className="grid grid-cols-6 gap-3">
+                                {colors.map(color => (
+                                    <button 
+                                        key={color.value}
+                                        type="button"
+                                        onClick={() => setFormData({ ...formData, color: color.value })}
+                                        className={`relative w-full h-12 rounded-lg transition-all hover:scale-110 ${
+                                            formData.color === color.value 
+                                                ? 'ring-4 ring-offset-2 ring-blue-500 shadow-lg' 
+                                                : 'shadow-md hover:shadow-lg'
+                                        }`}
+                                        style={{ backgroundColor: color.value }}
+                                        title={color.name}
+                                    >
+                                        {formData.color === color.value && (
+                                            <i className="fas fa-check text-white text-lg absolute inset-0 flex items-center justify-center"></i>
+                                        )}
+                                    </button>
+                                ))}
+                            </div>
+                            <div className="mt-3 flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                                <div 
+                                    className="w-8 h-8 rounded-full shadow-md"
+                                    style={{ backgroundColor: formData.color }}
+                                ></div>
+                                <span className="text-sm text-gray-700">
+                                    Color seleccionado: <strong>{colors.find(c => c.value === formData.color)?.name || 'Azul'}</strong>
+                                </span>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-3">
+                                <i className="fas fa-toggle-on mr-1 text-gray-400"></i>
+                                Estado
+                            </label>
+                            <label className="relative inline-flex items-center cursor-pointer">
+                                <input 
+                                    type="checkbox"
+                                    className="sr-only peer"
+                                    checked={formData.isActive}
+                                    onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
+                                />
+                                <div className="w-14 h-7 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-blue-600 shadow-inner"></div>
+                                <span className="ml-3 text-sm font-medium text-gray-700">
+                                    {formData.isActive 
+                                        ? '✓ Iniciativa activa (visible para todos los usuarios)' 
+                                        : '✗ Iniciativa inactiva (no se podrá asignar a prioridades)'}
+                                </span>
+                            </label>
+                        </div>
+
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                            <div className="flex items-start">
+                                <i className="fas fa-info-circle text-blue-600 mt-0.5 mr-2"></i>
+                                <div className="text-sm text-blue-800">
+                                    <strong>Consejos:</strong>
+                                    <ul className="list-disc list-inside mt-1 space-y-1">
+                                        <li>Elige un nombre claro y específico que todos entiendan</li>
+                                        <li>Usa colores distintivos para facilitar la identificación visual</li>
+                                        <li>Las iniciativas inactivas no aparecerán como opciones al crear prioridades</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end space-x-4 pt-4 border-t">
+                            <button 
+                                type="button"
+                                onClick={onCancel}
+                                className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition"
+                            >
+                                <i className="fas fa-times mr-2"></i>
+                                Cancelar
+                            </button>
+                            <button 
+                                type="submit"
+                                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition shadow-md"
+                            >
+                                <i className="fas fa-save mr-2"></i>
+                                {initiative ? 'Actualizar Iniciativa' : 'Crear Iniciativa'}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            );
+        }
+
+        // Render App
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+</body>
+</html>
